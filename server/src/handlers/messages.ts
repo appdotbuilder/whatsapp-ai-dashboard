@@ -1,10 +1,39 @@
+import { db } from '../db';
+import { messagesTable } from '../db/schema';
 import { type GetMessagesInput, type Message } from '../schema';
+import { eq, and, desc, SQL } from 'drizzle-orm';
 
 export async function getMessages(input: GetMessagesInput): Promise<Message[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch messages for a tenant with pagination and filtering.
-    // Steps: 1) Query messages table with filters, 2) Apply pagination, 3) Return messages array
-    return Promise.resolve([]);
+    try {
+        // Build conditions array
+        const conditions: SQL<unknown>[] = [];
+        
+        // Always filter by tenant_id
+        conditions.push(eq(messagesTable.tenant_id, input.tenant_id));
+        
+        // Optional filter by whatsapp_connection_id
+        if (input.whatsapp_connection_id !== undefined) {
+            conditions.push(eq(messagesTable.whatsapp_connection_id, input.whatsapp_connection_id));
+        }
+
+        // Apply pagination with defaults
+        const limit = input.limit || 50;
+        const offset = input.offset || 0;
+
+        // Build complete query in one chain
+        const results = await db.select()
+            .from(messagesTable)
+            .where(conditions.length === 1 ? conditions[0] : and(...conditions))
+            .orderBy(desc(messagesTable.created_at))
+            .limit(limit)
+            .offset(offset)
+            .execute();
+
+        return results;
+    } catch (error) {
+        console.error('Get messages failed:', error);
+        throw error;
+    }
 }
 
 export async function getMessageById(messageId: number): Promise<Message | null> {

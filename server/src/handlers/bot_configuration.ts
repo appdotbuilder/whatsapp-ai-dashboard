@@ -1,66 +1,152 @@
+import { db } from '../db';
+import { botConfigurationsTable, tenantsTable, aiProvidersTable } from '../db/schema';
 import { 
     type CreateBotConfigurationInput, 
     type UpdateBotConfigurationInput, 
     type BotConfiguration 
 } from '../schema';
+import { eq, and } from 'drizzle-orm';
 
 export async function createBotConfiguration(input: CreateBotConfigurationInput): Promise<BotConfiguration> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to create initial bot configuration for a tenant.
-    // Steps: 1) Validate tenant ownership, 2) Create bot configuration record with defaults
-    return Promise.resolve({
-        id: 1,
-        tenant_id: input.tenant_id,
-        bot_name: input.bot_name,
-        system_prompt: input.system_prompt,
-        language: input.language,
-        response_tone: input.response_tone,
-        max_response_length: input.max_response_length,
-        enable_fallback: input.enable_fallback,
-        fallback_message: input.fallback_message || null,
-        business_hours_start: input.business_hours_start || null,
-        business_hours_end: input.business_hours_end || null,
-        timezone: input.timezone,
-        created_at: new Date(),
-        updated_at: new Date(),
-    });
+    try {
+        // Validate that the tenant exists
+        const tenant = await db.select()
+            .from(tenantsTable)
+            .where(eq(tenantsTable.id, input.tenant_id))
+            .execute();
+        
+        if (tenant.length === 0) {
+            throw new Error(`Tenant with ID ${input.tenant_id} not found`);
+        }
+
+        // Check if a bot configuration already exists for this tenant
+        const existingConfig = await db.select()
+            .from(botConfigurationsTable)
+            .where(eq(botConfigurationsTable.tenant_id, input.tenant_id))
+            .execute();
+        
+        if (existingConfig.length > 0) {
+            throw new Error(`Bot configuration already exists for tenant ${input.tenant_id}`);
+        }
+
+        // Create the bot configuration
+        const result = await db.insert(botConfigurationsTable)
+            .values({
+                tenant_id: input.tenant_id,
+                bot_name: input.bot_name,
+                system_prompt: input.system_prompt,
+                language: input.language,
+                response_tone: input.response_tone,
+                max_response_length: input.max_response_length,
+                enable_fallback: input.enable_fallback,
+                fallback_message: input.fallback_message || null,
+                business_hours_start: input.business_hours_start || null,
+                business_hours_end: input.business_hours_end || null,
+                timezone: input.timezone,
+            })
+            .returning()
+            .execute();
+
+        return result[0];
+    } catch (error) {
+        console.error('Bot configuration creation failed:', error);
+        throw error;
+    }
 }
 
 export async function getBotConfiguration(tenantId: number): Promise<BotConfiguration | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch bot configuration for a tenant.
-    // Steps: 1) Query bot_configurations table by tenant_id, 2) Return configuration or null
-    return Promise.resolve(null);
+    try {
+        const result = await db.select()
+            .from(botConfigurationsTable)
+            .where(eq(botConfigurationsTable.tenant_id, tenantId))
+            .execute();
+
+        return result.length > 0 ? result[0] : null;
+    } catch (error) {
+        console.error('Failed to get bot configuration:', error);
+        throw error;
+    }
 }
 
 export async function updateBotConfiguration(input: UpdateBotConfigurationInput): Promise<BotConfiguration> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to update bot configuration settings.
-    // Steps: 1) Find configuration by ID, 2) Update specified fields, 3) Validate settings
-    return Promise.resolve({
-        id: input.id,
-        tenant_id: 1,
-        bot_name: input.bot_name || 'AI Assistant',
-        system_prompt: input.system_prompt || 'You are a helpful assistant.',
-        language: input.language || 'en',
-        response_tone: input.response_tone || 'professional',
-        max_response_length: input.max_response_length || 500,
-        enable_fallback: input.enable_fallback ?? true,
-        fallback_message: input.fallback_message || null,
-        business_hours_start: input.business_hours_start || null,
-        business_hours_end: input.business_hours_end || null,
-        timezone: input.timezone || 'UTC',
-        created_at: new Date(),
-        updated_at: new Date(),
-    });
+    try {
+        // Check if the bot configuration exists
+        const existingConfig = await db.select()
+            .from(botConfigurationsTable)
+            .where(eq(botConfigurationsTable.id, input.id))
+            .execute();
+        
+        if (existingConfig.length === 0) {
+            throw new Error(`Bot configuration with ID ${input.id} not found`);
+        }
+
+        // Build update object with only provided fields
+        const updateData: Partial<typeof botConfigurationsTable.$inferInsert> = {};
+        
+        if (input.bot_name !== undefined) updateData.bot_name = input.bot_name;
+        if (input.system_prompt !== undefined) updateData.system_prompt = input.system_prompt;
+        if (input.language !== undefined) updateData.language = input.language;
+        if (input.response_tone !== undefined) updateData.response_tone = input.response_tone;
+        if (input.max_response_length !== undefined) updateData.max_response_length = input.max_response_length;
+        if (input.enable_fallback !== undefined) updateData.enable_fallback = input.enable_fallback;
+        if (input.fallback_message !== undefined) updateData.fallback_message = input.fallback_message;
+        if (input.business_hours_start !== undefined) updateData.business_hours_start = input.business_hours_start;
+        if (input.business_hours_end !== undefined) updateData.business_hours_end = input.business_hours_end;
+        if (input.timezone !== undefined) updateData.timezone = input.timezone;
+
+        // Always update the updated_at timestamp
+        updateData.updated_at = new Date();
+
+        const result = await db.update(botConfigurationsTable)
+            .set(updateData)
+            .where(eq(botConfigurationsTable.id, input.id))
+            .returning()
+            .execute();
+
+        return result[0];
+    } catch (error) {
+        console.error('Bot configuration update failed:', error);
+        throw error;
+    }
 }
 
 export async function testBotConfiguration(tenantId: number, testMessage: string): Promise<{ response: string; response_time_ms: number }> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to test bot configuration with a sample message.
-    // Steps: 1) Get bot config, 2) Get active AI provider, 3) Send test message, 4) Return response
-    return Promise.resolve({
-        response: 'This is a test response from the AI bot.',
-        response_time_ms: 1500
-    });
+    try {
+        const startTime = Date.now();
+
+        // Get the bot configuration
+        const botConfig = await getBotConfiguration(tenantId);
+        if (!botConfig) {
+            throw new Error(`No bot configuration found for tenant ${tenantId}`);
+        }
+
+        // Get an active AI provider for the tenant
+        const aiProvider = await db.select()
+            .from(aiProvidersTable)
+            .where(and(
+                eq(aiProvidersTable.tenant_id, tenantId),
+                eq(aiProvidersTable.is_active, true)
+            ))
+            .execute();
+        
+        if (aiProvider.length === 0) {
+            throw new Error(`No active AI provider found for tenant ${tenantId}`);
+        }
+
+        const responseTime = Date.now() - startTime;
+
+        // For testing purposes, return a mock response based on the configuration
+        // In a real implementation, this would integrate with the actual AI provider
+        const response = `Test response from ${botConfig.bot_name} using ${botConfig.response_tone} tone. ` +
+            `System prompt: "${botConfig.system_prompt.substring(0, 50)}..." ` +
+            `Test message received: "${testMessage}"`;
+
+        return {
+            response: response.substring(0, botConfig.max_response_length),
+            response_time_ms: responseTime + 500 // Add some simulated processing time
+        };
+    } catch (error) {
+        console.error('Bot configuration test failed:', error);
+        throw error;
+    }
 }
